@@ -73,31 +73,22 @@ class Application:
             logger.error(f"Failed to initialize application: {e}")
             sys.exit(1)
     
-    def start_bot_polling(self):
-        """Start Telegram bot in a separate thread."""
-        def run_bot():
-            try:
-                self.telegram_bot.run()
-            except Exception as e:
-                logger.error(f"Bot polling error: {e}")
-        
-        self.bot_thread = Thread(target=run_bot, daemon=True)
-        self.bot_thread.start()
-        logger.info("Telegram bot polling started in background thread")
     
     def start(self):
         """Start the application."""
         self.initialize()
         
-        # Start Telegram bot polling
-        self.start_bot_polling()
-        
         self.running = True
         logger.info("TikTok Hashtag Alert Bot is running!")
         logger.info("Press Ctrl+C to stop")
         
-        # Start scheduler (this is blocking and will run until interrupted)
+        # Start scheduler (non-blocking, runs in background)
         self.scheduler.start()
+        
+        # Run Telegram bot in main thread (blocking)
+        # This must run in main thread on Linux
+        logger.info("Starting Telegram bot polling...")
+        self.telegram_bot.run()
     
     def stop(self):
         """Stop the application."""
@@ -119,16 +110,9 @@ class Application:
     
     def run(self):
         """Run the application (blocking)."""
-        # Start application
-        self.start()
-        
-        # Keep main thread alive and handle shutdown
         try:
-            logger.info("Bot is running. Press Ctrl+C to stop.")
-            # Use simple sleep loop instead of asyncio to avoid event loop conflicts
-            import time
-            while self.running:
-                time.sleep(0.5)
+            # Start application (this will block in telegram bot polling)
+            self.start()
         except KeyboardInterrupt:
             logger.info("Shutdown signal received, stopping bot...")
             self.stop()
