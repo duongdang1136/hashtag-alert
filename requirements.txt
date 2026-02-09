@@ -1,0 +1,17 @@
+# Telegram Bot
+python-telegram-bot>=21.0
+
+# TikTok Scraping
+TikTokApi==6.5.2
+yt-dlp==2024.8.6
+playwright==1.47.0
+
+# Database
+supabase>=2.10.0
+
+# Scheduling
+APScheduler==3.10.4
+
+# Configuration
+python-dotenv==1.0.1
+
