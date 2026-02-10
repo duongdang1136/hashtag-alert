@@ -52,6 +52,8 @@ class TikTokScraper:
                 'extract_flat': 'in_playlist',
                 'skip_download': True,
                 'ignoreerrors': True,
+                'playlist_items': f'1-{count}',  # CRITICAL: Only fetch first N items
+                'playlistend': count,             # Additional safety limit
                 'extractor_args': {
                     'tiktok': {
                         'api_hostname': 'api22-normal-c-useast2a.tiktokv.com',
