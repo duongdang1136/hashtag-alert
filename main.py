@@ -4,7 +4,6 @@ from logging.handlers import RotatingFileHandler
 import asyncio
 import signal
 import sys
-from threading import Thread
 
 from config.settings import settings
 from src.database.supabase_client import SupabaseClient
@@ -40,7 +39,6 @@ class Application:
         self.telegram_bot = None
         self.monitor = None
         self.scheduler = None
-        self.bot_thread = None
         self.running = False
     
     def initialize(self):
@@ -78,24 +76,27 @@ class Application:
             logger.error(f"Failed to initialize application: {e}")
             sys.exit(1)
     
-    
-    def start(self):
-        """Start the application."""
-        self.initialize()
-        
+    async def start(self):
+        """Start the application (async)."""
         self.running = True
         logger.info("TikTok Hashtag Alert Bot is running!")
-        logger.info("Press Ctrl+C to stop")
         
-        # Start scheduler (non-blocking, runs in background)
+        # Start scheduler task (non-blocking)
         self.scheduler.start()
         
-        # Run Telegram bot in main thread (blocking)
-        # This must run in main thread on Linux
+        # Initialize and run Telegram bot
         logger.info("Starting Telegram bot polling...")
-        self.telegram_bot.run()
+        await self.telegram_bot.application.initialize()
+        await self.telegram_bot.application.start()
+        await self.telegram_bot.application.updater.start_polling()
+        
+        # Keep running until stopped
+        try:
+            await asyncio.Event().wait()  # Wait forever
+        except asyncio.CancelledError:
+            pass
     
-    def stop(self):
+    async def stop(self):
         """Stop the application."""
         if not self.running:
             return
@@ -104,35 +105,43 @@ class Application:
         
         # Stop scheduler
         if self.scheduler:
-            self.scheduler.stop()
+            await self.scheduler.stop()
         
         # Stop Telegram bot
         if self.telegram_bot and self.telegram_bot.application:
-            asyncio.run(self.telegram_bot.application.stop())
+            await self.telegram_bot.application.updater.stop()
+            await self.telegram_bot.application.stop()
         
         self.running = False
         logger.info("Application stopped")
     
-    def run(self):
-        """Run the application (blocking)."""
+    async def run(self):
+        """Run the application (async)."""
+        self.initialize()
+        
         try:
-            # Start application (this will block in telegram bot polling)
-            self.start()
+            await self.start()
         except KeyboardInterrupt:
-            logger.info("Shutdown signal received, stopping bot...")
-            self.stop()
+            logger.info("Shutdown signal received")
+        finally:
+            await self.stop()
+
+
+async def main_async():
+    """Async main entry point."""
+    app = Application()
+    await app.run()
 
 
 def main():
     """Main entry point."""
     try:
-        app = Application()
-        app.run()
+        asyncio.run(main_async())
     except KeyboardInterrupt:
         logger.info("Application interrupted by user")
         sys.exit(0)
     except Exception as e:
-        logger.error(f"Fatal error: {e}")
+        logger.error(f"Fatal error: {e}", exc_info=True)
         sys.exit(1)
 
 

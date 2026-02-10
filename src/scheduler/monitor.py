@@ -25,13 +25,12 @@ class Monitor:
         self.scraper = tiktok_scraper
         self.bot = telegram_bot
     
-    async def check_creator(self, creator: Dict[str, Any], silent: bool = False) -> List[Dict[str, Any]]:
+    async def check_creator(self, creator: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Check a single creator for new posts.
         
         Args:
             creator: Creator information from database
-            silent: If True, save posts but don't send alerts (for initial setup)
             
         Returns:
             List of new posts found
@@ -40,10 +39,11 @@ class Monitor:
         creator_id = creator['id']
         
         try:
-            # Get existing posts for this creator (only fetch what we need)
+            # Get existing posts for this creator
+            # Use larger limit (50) to avoid missing old posts and sending duplicates
             existing_posts = self.db.get_creator_posts(
                 creator_id=creator_id,
-                limit=settings.MAX_POSTS_PER_CHECK
+                limit=50  # Increased from 5 to properly detect duplicates
             )
             existing_post_ids = [post['tiktok_post_id'] for post in existing_posts]
             
@@ -58,10 +58,11 @@ class Monitor:
                 logger.debug(f"No new posts for @{username}")
                 return []
             
-            # Store new posts and optionally send alerts
+            # Store new posts and send alerts
+            successfully_added = []
             for post in new_posts:
                 # Add post to database
-                self.db.add_post(
+                result = self.db.add_post(
                     creator_id=creator_id,
                     tiktok_post_id=post['id'],
                     post_url=post['url'],
@@ -70,15 +71,46 @@ class Monitor:
                     created_at=post.get('created_at')
                 )
                 
-                # Send alert only if not in silent mode
-                if not silent:
-                    await self.bot.send_alerts_to_all_users(post, username)
+                # Only send alert if post was successfully added (not duplicate)
+                if result:
+                    # Check if we should alert based on post age
+                    should_alert = True
+                    
+                    if settings.ALERT_ONLY_RECENT_POSTS and post.get('created_at'):
+                        from datetime import datetime, timedelta, timezone
+                        
+                        # Calculate threshold: now - (interval + buffer)
+                        # Buffer accounts for scraping delays
+                        threshold = datetime.now(timezone.utc) - timedelta(
+                            minutes=settings.MONITOR_INTERVAL_MINUTES * 2
+                        )
+                        
+                        post_time = post['created_at']
+                        
+                        # If post doesn't have timezone, assume UTC
+                        if post_time.tzinfo is None:
+                            post_time = post_time.replace(tzinfo=timezone.utc)
+                        
+                        if post_time < threshold:
+                            should_alert = False
+                            logger.info(
+                                f"Skipping alert for old post {post['id']} "
+                                f"from @{username} (created: {post_time}, "
+                                f"threshold: {threshold})"
+                            )
+                    
+                    if should_alert:
+                        await self.bot.send_alerts_to_all_users(post, username)
+                        successfully_added.append(post)
+                    else:
+                        # Still add to successfully_added for accurate count
+                        successfully_added.append(post)
+                else:
+                    logger.warning(f"Skipped duplicate post {post['id']} for @{username}")
+
             
-            if silent:
-                logger.info(f"Silently saved {len(new_posts)} posts for @{username} (initial setup)")
-            else:
-                logger.info(f"Processed {len(new_posts)} new posts for @{username}")
-            return new_posts
+            logger.info(f"Processed {len(successfully_added)} new posts for @{username}")
+            return successfully_added
             
         except Exception as e:
             logger.error(f"Error checking creator @{username}: {e}")

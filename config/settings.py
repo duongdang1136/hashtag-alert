@@ -20,6 +20,9 @@ class Settings:
     MONITOR_INTERVAL_MINUTES: int = int(os.getenv('MONITOR_INTERVAL_MINUTES', '10'))
     MAX_POSTS_PER_CHECK: int = int(os.getenv('MAX_POSTS_PER_CHECK', '5'))
     
+    # Alert settings
+    ALERT_ONLY_RECENT_POSTS: bool = os.getenv('ALERT_ONLY_RECENT_POSTS', 'true').lower() == 'true'
+    
     # Logging
     LOG_LEVEL: str = os.getenv('LOG_LEVEL', 'INFO')
     

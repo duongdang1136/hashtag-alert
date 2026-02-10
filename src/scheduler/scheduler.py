@@ -1,53 +1,66 @@
-"""Task scheduler for periodic monitoring."""
+"""Task scheduling using asyncio instead of APScheduler."""
 import logging
 import asyncio
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.interval import IntervalTrigger
+from typing import Optional
 
 from config.settings import settings
-from src.scheduler.monitor import Monitor
 
 logger = logging.getLogger(__name__)
 
 
 class TaskScheduler:
-    """Task scheduler for monitoring TikTok creators."""
+    """Scheduler for periodic monitoring tasks using asyncio."""
     
-    def __init__(self, monitor: Monitor):
-        """Initialize scheduler."""
+    def __init__(self, monitor):
+        """Initialize scheduler with monitor instance."""
         self.monitor = monitor
-        self.scheduler = BackgroundScheduler()
-    
-    def _run_monitoring(self):
-        """Wrapper to run async monitoring in sync context."""
-        try:
-            asyncio.run(self.monitor.check_all_creators())
-        except Exception as e:
-            logger.error(f"Error in monitoring cycle: {e}")
+        self.task: Optional[asyncio.Task] = None
+        self.running = False
+        
+    async def _monitoring_loop(self):
+        """Background monitoring loop that runs periodically."""
+        logger.info(f"Monitoring task started (interval: {settings.MONITOR_INTERVAL_MINUTES} minutes)")
+        
+        while self.running:
+            try:
+                # Run monitoring check
+                await self.monitor.check_all_creators()
+                
+                # Wait for next interval
+                await asyncio.sleep(settings.MONITOR_INTERVAL_MINUTES * 60)
+                
+            except asyncio.CancelledError:
+                logger.info("Monitoring task cancelled")
+                break
+            except Exception as e:
+                logger.error(f"Error in monitoring loop: {e}", exc_info=True)
+                # Wait a bit before retrying on error
+                await asyncio.sleep(60)
     
     def start(self):
-        """Start the scheduler."""
-        # Add monitoring job
-        self.scheduler.add_job(
-            func=self._run_monitoring,
-            trigger=IntervalTrigger(minutes=settings.MONITOR_INTERVAL_MINUTES),
-            id='monitor_creators',
-            name='Monitor TikTok creators for new posts',
-            replace_existing=True
-        )
-        
-        logger.info(
-            f"Scheduler started. Monitoring every {settings.MONITOR_INTERVAL_MINUTES} minutes."
-        )
-        
-        # Run first check immediately in background
-        import threading
-        threading.Thread(target=self._run_monitoring, daemon=True).start()
-        
-        # Start scheduler (non-blocking)
-        self.scheduler.start()
+        """Start the monitoring task."""
+        if self.running:
+            logger.warning("Scheduler already running")
+            return
+            
+        self.running = True
+        # Create asyncio task (non-blocking)
+        self.task = asyncio.create_task(self._monitoring_loop())
+        logger.info("Scheduler started successfully")
     
-    def stop(self):
-        """Stop the scheduler."""
-        self.scheduler.shutdown()
+    async def stop(self):
+        """Stop the monitoring task."""
+        if not self.running:
+            return
+            
+        logger.info("Stopping scheduler...")
+        self.running = False
+        
+        if self.task:
+            self.task.cancel()
+            try:
+                await self.task
+            except asyncio.CancelledError:
+                pass
+        
         logger.info("Scheduler stopped")
