@@ -52,8 +52,7 @@ class TikTokScraper:
                 'extract_flat': 'in_playlist',
                 'skip_download': True,
                 'ignoreerrors': True,
-                'playlist_items': f'1-{count}',  # CRITICAL: Only fetch first N items
-                'playlistend': count,             # Additional safety limit
+                'playlist_items': f'1-{count}',  # Only fetch first N items
                 'extractor_args': {
                     'tiktok': {
                         'api_hostname': 'api22-normal-c-useast2a.tiktokv.com',
@@ -111,9 +110,6 @@ class TikTokScraper:
                         processed += 1
                         
                         logger.debug(f"Processed video {video_id} for @{username}")
-                        
-                        # Rate limiting
-                        time.sleep(settings.TIKTOK_REQUEST_DELAY)
                         
                     except Exception as e:
                         logger.debug(f"Error processing video entry: {e}")

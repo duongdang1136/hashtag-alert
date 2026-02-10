@@ -1,5 +1,6 @@
 """TikTok Hashtag Alert Bot - Main application."""
 import logging
+from logging.handlers import RotatingFileHandler
 import asyncio
 import signal
 import sys
@@ -12,12 +13,16 @@ from src.bot.telegram_bot import TelegramBot
 from src.scheduler.monitor import Monitor
 from src.scheduler.scheduler import TaskScheduler
 
-# Setup logging
+# Setup logging with rotation
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=getattr(logging, settings.LOG_LEVEL),
     handlers=[
-        logging.FileHandler('bot.log'),
+        RotatingFileHandler(
+            'bot.log',
+            maxBytes=10*1024*1024,  # 10MB
+            backupCount=5  # Keep 5 old logs
+        ),
         logging.StreamHandler()
     ]
 )

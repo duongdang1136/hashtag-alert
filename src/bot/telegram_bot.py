@@ -74,7 +74,12 @@ class TelegramBot:
             logger.info(f"Sent alert to user {telegram_user_id} for post {post.get('id')}")
             
         except Exception as e:
-            logger.error(f"Error sending alert to user {telegram_user_id}: {e}")
+            logger.error(
+                f"Error sending alert: user={telegram_user_id}, "
+                f"post={post.get('id')}, creator={post.get('author')}, "
+                f"error={e}",
+                exc_info=True
+            )
     
     async def send_alerts_to_all_users(self, post: Dict[str, Any], creator_username: str):
         """

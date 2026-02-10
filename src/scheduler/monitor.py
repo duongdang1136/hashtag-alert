@@ -25,12 +25,13 @@ class Monitor:
         self.scraper = tiktok_scraper
         self.bot = telegram_bot
     
-    async def check_creator(self, creator: Dict[str, Any]) -> List[Dict[str, Any]]:
+    async def check_creator(self, creator: Dict[str, Any], silent: bool = False) -> List[Dict[str, Any]]:
         """
         Check a single creator for new posts.
         
         Args:
             creator: Creator information from database
+            silent: If True, save posts but don't send alerts (for initial setup)
             
         Returns:
             List of new posts found
@@ -39,10 +40,10 @@ class Monitor:
         creator_id = creator['id']
         
         try:
-            # Get existing posts for this creator
+            # Get existing posts for this creator (only fetch what we need)
             existing_posts = self.db.get_creator_posts(
                 creator_id=creator_id,
-                limit=20
+                limit=settings.MAX_POSTS_PER_CHECK
             )
             existing_post_ids = [post['tiktok_post_id'] for post in existing_posts]
             
@@ -57,7 +58,7 @@ class Monitor:
                 logger.debug(f"No new posts for @{username}")
                 return []
             
-            # Store new posts and send alerts
+            # Store new posts and optionally send alerts
             for post in new_posts:
                 # Add post to database
                 self.db.add_post(
@@ -69,10 +70,14 @@ class Monitor:
                     created_at=post.get('created_at')
                 )
                 
-                # Send alert
-                await self.bot.send_alerts_to_all_users(post, username)
+                # Send alert only if not in silent mode
+                if not silent:
+                    await self.bot.send_alerts_to_all_users(post, username)
             
-            logger.info(f"Processed {len(new_posts)} new posts for @{username}")
+            if silent:
+                logger.info(f"Silently saved {len(new_posts)} posts for @{username} (initial setup)")
+            else:
+                logger.info(f"Processed {len(new_posts)} new posts for @{username}")
             return new_posts
             
         except Exception as e:
